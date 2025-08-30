@@ -1,0 +1,2077 @@
+commit 4cde404c71afa95908ac75d414d8c467b331e448
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed May 4 12:04:58 2016 +0000
+
+    openssl: Update to version 1.0.2h
+    
+    Bump to the latest version, fixes several security issues:
+     * CVE-2016-2107, CVE-2016-2105, CVE-2016-2106, CVE-2016-2109, CVE-2016-2176
+    More details at https://www.openssl.org/news/openssl-1.0.2-notes.html
+    
+    Signed-off-by: Michal Hrusecky <Michal.Hrusecky@nic.cz>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@49295 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 3a9ccf56f4404cf10d6006d26b76d869524fe930
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Mar 1 14:31:08 2016 +0000
+
+    openssl: update to 1.0.2g (8 CVEs)
+    
+    CVE-2016-0704
+    
+    s2_srvr.c overwrite the wrong bytes in the master-key when applying
+    Bleichenbacher protection for export cipher suites. This provides a
+    Bleichenbacher oracle, and could potentially allow more efficient variants of
+    the DROWN attack.
+    
+    CVE-2016-0703
+    
+    s2_srvr.c did not enforce that clear-key-length is 0 for non-export ciphers.
+    If clear-key bytes are present for these ciphers, they *displace* encrypted-key
+    bytes. This leads to an efficient divide-and-conquer key recovery attack: if
+    an eavesdropper has intercepted an SSLv2 handshake, they can use the server as
+    an oracle to determine the SSLv2 master-key, using only 16 connections to the
+    server and negligible computation. More importantly, this leads to a more
+    efficient version of DROWN that is effective against non-export ciphersuites,
+    and requires no significant computation.
+    
+    CVE-2016-0702
+    
+    A side-channel attack was found which makes use of cache-bank conflicts on
+    the Intel Sandy-Bridge microarchitecture which could lead to the recovery of
+    RSA keys. The ability to exploit this issue is limited as it relies on an
+    attacker who has control of code in a thread running on the same hyper-
+    threaded core as the victim thread which is performing decryptions.
+    
+    CVE-2016-0799
+    
+    The internal |fmtstr| function used in processing a "%s" format string in
+    the BIO_*printf functions could overflow while calculating the length of a
+    string and cause an OOB read when printing very long strings. Additionally
+    the internal |doapr_outch| function can attempt to write to an OOB memory
+    location (at an offset from the NULL pointer) in the event of a memory
+    allocation failure. In 1.0.2 and below this could be caused where the size
+    of a buffer to be allocated is greater than INT_MAX. E.g. this could be in
+    processing a very long "%s" format string. Memory leaks can also occur.
+    The first issue may mask the second issue dependent on compiler behaviour.
+    These problems could enable attacks where large amounts of untrusted data is
+    passed to the BIO_*printf functions. If applications use these functions in
+    this way then they could be vulnerable. OpenSSL itself uses these functions
+    when printing out human-readable dumps of ASN.1 data. Therefore applications
+    that print this data could be vulnerable if the data is from untrusted sources.
+    OpenSSL command line applications could also be vulnerable where they print out
+    ASN.1 data, or if untrusted data is passed as command line arguments. Libssl is
+    not considered directly vulnerable. Additionally certificates etc received via
+    remote connections via libssl are also unlikely to be able to trigger these
+    issues because of message size limits enforced within libssl.
+    
+    CVE-2016-0797
+    
+    In the BN_hex2bn function the number of hex digits is calculated using an int
+    value |i|. Later |bn_expand| is called with a value of |i * 4|. For large
+    values of |i| this can result in |bn_expand| not allocating any memory because
+    |i * 4| is negative. This can leave the internal BIGNUM data field as NULL
+    leading to a subsequent NULL ptr deref. For very large values of |i|, the
+    calculation |i * 4| could be a positive value smaller than |i|. In this case
+    memory is allocated to the internal BIGNUM data field, but it is insufficiently
+    sized leading to heap corruption. A similar issue exists in BN_dec2bn. This
+    could have security consequences if BN_hex2bn/BN_dec2bn is ever called by user
+    applications with very large untrusted hex/dec data. This is anticipated to be
+    a rare occurrence. All OpenSSL internal usage of these functions use data that
+    is not expected to be untrusted, e.g. config file data or application command
+    line arguments. If user developed applications generate config file data based
+    on untrusted data then it is possible that this could also lead to security
+    consequences. This is also anticipated to be rare.
+    
+    CVE-2016-0798
+    
+    The SRP user database lookup method SRP_VBASE_get_by_user had confusing memory
+    management semantics; the returned pointer was sometimes newly allocated, and
+    sometimes owned by the callee. The calling code has no way of distinguishing
+    these two cases. Specifically, SRP servers that configure a secret seed to hide
+    valid login information are vulnerable to a memory leak: an attacker connecting
+    with an invalid username can cause a memory leak of around 300 bytes per
+    connection. Servers that do not configure SRP, or configure SRP but do not
+    configure a seed are not vulnerable. In Apache, the seed directive is known as
+    SSLSRPUnknownUserSeed. To mitigate the memory leak, the seed handling in
+    SRP_VBASE_get_by_user is now disabled even if the user has configured a seed.
+    Applications are advised to migrate to SRP_VBASE_get1_by_user. However, note
+    that OpenSSL makes no strong guarantees about the indistinguishability of valid
+    and invalid logins. In particular, computations are currently not carried out
+    in constant time.
+    
+    CVE-2016-0705
+    
+    A double free bug was discovered when OpenSSL parses malformed DSA private keys
+    and could lead to a DoS attack or memory corruption for applications that
+    receive DSA private keys from untrusted sources. This scenario is considered
+    rare.
+    
+    CVE-2016-0800
+    
+    A cross-protocol attack was discovered that could lead to decryption of TLS
+    sessions by using a server supporting SSLv2 and EXPORT cipher suites as a
+    Bleichenbacher RSA padding oracle. Note that traffic between clients and non-
+    vulnerable servers can be decrypted provided another server supporting SSLv2
+    and EXPORT ciphers (even with a different protocol such as SMTP, IMAP or POP)
+    shares the RSA keys of the non-vulnerable server. This vulnerability is known
+    as DROWN (CVE-2016-0800). Recovering one session key requires the attacker to
+    perform approximately 2^50 computation, as well as thousands of connections to
+    the affected server. A more efficient variant of the DROWN attack exists
+    against unpatched OpenSSL servers using versions that predate 1.0.2a, 1.0.1m,
+    1.0.0r and 0.9.8zf released on 19/Mar/2015 (see CVE-2016-0703 below). Users can
+    avoid this issue by disabling the SSLv2 protocol in all their SSL/TLS servers,
+    if they've not done so already. Disabling all SSLv2 ciphers is also sufficient,
+    provided the patches for CVE-2015-3197 (fixed in OpenSSL 1.0.1r and 1.0.2f)
+    have been deployed. Servers that have not disabled the SSLv2 protocol, and are
+    not patched for CVE-2015-3197 are vulnerable to DROWN even if all SSLv2
+    ciphers are nominally disabled, because malicious clients can force the use of
+    SSLv2 with EXPORT ciphers. OpenSSL 1.0.2g and 1.0.1s deploy the following
+    mitigation against DROWN: SSLv2 is now by default disabled at build-time.
+    Builds that are not configured with "enable-ssl2" will not support SSLv2.
+    Even if "enable-ssl2" is used, users who want to negotiate SSLv2 via the
+    version-flexible SSLv23_method() will need to explicitly call either of:
+    SSL_CTX_clear_options(ctx, SSL_OP_NO_SSLv2); or SSL_clear_options(ssl,
+    SSL_OP_NO_SSLv2); as appropriate. Even if either of those is used, or the
+    application explicitly uses the version-specific SSLv2_method() or its client
+    or server variants, SSLv2 ciphers vulnerable to exhaustive search key recovery
+    have been removed. Specifically, the SSLv2 40-bit EXPORT ciphers, and SSLv2
+    56-bit DES are no longer available. In addition, weak ciphers in SSLv3 and up
+    are now disabled in default builds of OpenSSL. Builds that are not configured
+    with "enable-weak-ssl-ciphers" will not provide any "EXPORT" or "LOW" strength
+    ciphers.
+    
+    Signed-off-by: Jo-Philipp Wich <jow@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48868 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b90dfd38d174a9424449d3a76c1fa5f3abc60ef0
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 22 08:54:46 2016 +0000
+
+    ustream-ssl: update to the latest version, fixes openssl TLS version selection
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48752 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d98408f4d8882362cf20de9726c1dd8119a3baf4
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 28 18:20:06 2016 +0000
+
+    openssl: update to 1.0.2f (fixes CVE-2016-0701, CVE-2015-3197)
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48531 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 806950bedbc73571ca2855e3692140f10b1c0b8c
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jan 26 00:10:19 2016 +0000
+
+    ustream-ssl: update to the latest version, fixes hostname validation with openssl
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48503 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 51cd80fdef9632bb8ac2ef6fff6c99155b0e0585
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Jan 18 12:42:08 2016 +0000
+
+    openssl: remove the separate configuration menu, use the implicit one (via MENU:=1)
+    
+    Fixes warning on selecting OPENSSL_ENGINE_CRYPTO if openssl is not selected
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48312 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cc7e7b7915b13b45826a458eb135379f4ae2f5f2
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jan 17 10:42:32 2016 +0000
+
+    Support LibreSSL as provider of openssl
+    
+    The build scripts check for openssl by grepping the string "OpenSSL" in
+    the output of openssl version command. LibreSSL fails this test as it
+    outputs something like "LibreSSL 2.2.4". This patch fix the
+    prereq-bulid.mk file so that it accepts LibreSSL as openssl provider as
+    well.
+    
+    Signed-off-by: Marek Behun <kabel@blackhole.sk>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48267 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8697e27eaec3dabaaa5272d2650cd20116be8c85
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jan 16 10:24:15 2016 +0000
+
+    download.pl: fix openssl sha256 digest output
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@48259 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d280ed5bef8db3a358c1052cd1a170404df2b837
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Dec 11 15:07:40 2015 +0000
+
+    OpenSSL: Added source/old to PKG_SOURCE_URL
+    
+    OpenSSL moves old versions of the library from
+    http://www.openssl.org/source/ to
+    http://www.openssl.org/source/old/$version/ breaking the old links.
+    That behavior breaks the OpenWRT-build every time OpenSSL releases
+    a new version.
+    
+    This patch adds http://www.openssl.org/source/old/$version/ to the
+    PKG_SOURCE_URL of OpenSSL to avoid breaking the build whenever
+    OpenSSL releases a new version.
+    
+    Signed-off-by: Kevin Kirsch <ranlvor@starletp9.de>
+    Reviewed-by: Alexander Dahl <post@lespocky.de>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@47860 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7f04f9475a37d0586c80586554c710c11a0fa8fb
+Author: hauke <hauke@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Dec 9 22:26:40 2015 +0000
+
+    openssl: add config option for no_hw support
+    
+    The hardware support is required by some 3rd party engines (tpm)
+    
+    Signed-off-by: Florian Eckert <Eckert.Florian@googlemail.com>
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@47817 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 1dfc2990d93a7a54e1bfb4f53fa9fa6841447992
+Author: hauke <hauke@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Dec 3 21:01:57 2015 +0000
+
+    openssl: update to version 1.0.2e
+    
+    This fixes the following security problems:
+    * CVE-2015-3193
+    * CVE-2015-3194
+    * CVE-2015-3195)
+    
+    Signed-off-by: Hauke Mehrtens <hauke@hauke-m.de>
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@47726 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5e2d1cbfa737759ac8ef0810e56946537df38917
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 5 14:11:25 2015 +0000
+
+    build: use host cflags/ldflags for openssl prereq check
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@47138 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e5f292e7aca03a8d2b38f21230e8d47e3b9c6176
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Sep 11 16:31:18 2015 +0000
+
+    hostapd: work around unconditional libopenssl build dependency
+    
+    As the OpenWrt build system only resolves build dependencies per directory,
+    all hostapd variants were causing libopenssl to be downloaded and built,
+    not only wpad-mesh. Fix this by applying the same workaround as in
+    ustream-ssl.
+    
+    Signed-off-by: Matthias Schiffer <mschiffer@universe-factory.net>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@46851 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit bddeb9ab371dbe801c435c97361aaf3f50908491
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Sep 11 16:31:01 2015 +0000
+
+    opkg: work around unconditional libopenssl build dependency
+    
+    As the OpenWrt build system only resolves build dependencies per directory,
+    all opkg variants were causing libopenssl to be downloaded and built,
+    not only opkg-smime. Fix this by applying the same workaround as in
+    ustream-ssl.
+    
+    Signed-off-by: Matthias Schiffer <mschiffer@universe-factory.net>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@46850 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9b61c81c19356e71bd790a1fefeca0b93e605839
+Author: luka <luka@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jul 28 21:54:44 2015 +0000
+
+    openssl: add one more mirror
+    
+    Signed-off-by: Luka Perkov <luka@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@46517 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 824beb9a7f1e0c2943e4f6da6af1586b71b85aed
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jul 9 13:04:27 2015 +0000
+
+    openssl: update to v1.0.2d (CVE-2015-1793)
+    
+    During certificate verification, OpenSSL (starting from version 1.0.1n and
+    1.0.2b) will attempt to find an alternative certificate chain if the first
+    attempt to build such a chain fails. An error in the implementation of this
+    logic can mean that an attacker could cause certain checks on untrusted
+    certificates to be bypassed, such as the CA flag, enabling them to use a valid
+    leaf certificate to act as a CA and "issue" an invalid certificate.
+    
+    This issue will impact any application that verifies certificates including
+    SSL/TLS/DTLS clients and SSL/TLS/DTLS servers using client authentication.
+    
+    Signed-off-by: Jo-Philipp Wich <jow@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@46285 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b38dd06826ae2c0c3041dd334ffc3c0bf60055a5
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jun 16 17:28:11 2015 +0000
+
+    openssl: disable parallel builds (spurious linking break)
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@46005 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 1984452f828a1551a962669ea6c5ea20e9da4e83
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Jun 12 20:49:20 2015 +0000
+
+    openssl: 1.0.2c (srsly, you guys, srsly)
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@45950 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 09ec96eef2116b0dc18fc04a1572af9c8760f71f
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 11 20:36:46 2015 +0000
+
+    openssl: fixes CVE-2015-4000 CVE-2015-1788 CVE-2015-1789 CVE-2015-1790 CVE-2015-1792 CVE-2015-1791
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@45947 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8a2b958bbae529ff8389eb3a30e21dc9e1d282db
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 11 20:28:44 2015 +0000
+
+    openssl: 1.0.2b (hey, we made it nearly 3 months this time!)
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@45946 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e714ebbc14f732a4a56ddf7da18f8fb1b8e381cd
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Apr 10 08:27:55 2015 +0000
+
+    openssl: disable arm optimisation until we know why it fails on some socs
+    
+    Signed-off-by: John Crispin <blogic@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@45343 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 30daad403960b429849e7182da19bb0e19e06ada
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Mar 26 23:33:56 2015 +0000
+
+    hostapd: package wpad-mesh and wpa_supplicant-mesh variants
+    
+    These new variants include support for mesh mode and SAE crypto.
+    They always depend on openssl as EC operations are not provided by
+    the internal crypto implementation.
+    
+    Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@45047 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 40daad2fe8d90f4464cdd17f3f0aa5ed44be43e0
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Mar 20 08:14:42 2015 +0000
+
+    openssl: biweekly critical security update
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@44900 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9cb7a386adea2909fd292fa5cb2718d5dcc82a53
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Mar 6 07:57:10 2015 +0000
+
+    openssl: enable ARM assembly acceleration
+    
+    Tested myself on ixp4xx and mvebu, and (originally)
+    by Daniel on i.MX6. Also tested on a MIPS target,
+    to make sure the change to ASFLAGS does not break things.
+    
+    Based on a patch submitted by Daniel Drown:
+    
+    https://lists.openwrt.org/pipermail/openwrt-devel/2014-July/026639.html
+    
+    Signed-off-by: Claudio Leite <leitec@staticky.com>
+    Signed-off-by: Daniel Drown <dan-openwrt@drown.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@44618 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0a9e721c718101b89353dc29dbebf928614a985a
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 9 15:26:35 2015 +0000
+
+    openssl: fix upstream regression for non-ec builds
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@44364 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7f28113b0245dd34f4a814e9f700ded00e615e49
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 9 12:04:00 2015 +0000
+
+    openssl: bump to 1.0.2
+    
+    Fixes CVE-2014-3513, CVE-2014-3567, CVE-2014-3568, CVE-2014-3566
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@44332 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 55cf2cc6bd68227979d660670628a0651311e54b
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 2 09:02:24 2015 +0000
+
+    cURL: implement new functionality with cleanup and fixes
+    
+    remove obsolete configuration settings
+      --disable-thread
+      --enable-nonblocking
+      --without-krb4
+    remove SSPI support
+      only supported on windows
+    correct --with/without-ca-path handling
+      only supported with OpenSSL and PolarSSL
+    correct LDAP/LDAPS protocol
+      add dependency libopenldap
+    added SCP/SFTP protocol
+      default "No"
+      depends on libssh2
+    added IDN support
+      default "No"
+      depends on libidn
+    added SMB protocol (new in 7.40)
+      default "No"
+      require 'cryptographic authentication' and either 'GnuTLS' or 'OpenSSL' selected
+    added Unix sockets support (new in 7.40)
+      default "No"
+    added error verbose messages
+      default "No"
+    changes to Makefile
+      Increase PKG_RELEASE
+      PKG_CONFIG_DEPENDS and CONFIGURE_ARGS
+        extended for new functionality
+        use "autoconf_bool" for all --enable/--disable options
+        restructure for easier reading
+    changes to Config.in
+      extended for new functionality
+      implement dependencies
+      restructure and grouping for easier reading
+    build tested on XUbuntu 14.10 x86 for x86 (generic) and ar71xx (WNDR3800)
+    
+    Signed-off-by: Christian Schoenebeck <christian.schoenebeck@gmail.com>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@44243 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d56a4036183b9b3fd51e20a3db37328d61a8cce7
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 15 17:59:06 2015 +0000
+
+    openssl: update to 1.0.1l *sigh*
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43976 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 4c2cb7206dae7144d2e7895d57a1c84d8c255588
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 8 18:29:26 2015 +0000
+
+    openssl: bump to 1.0.1j
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43875 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0346ddaae0f78c1648a8f99b4cecc66529f25aa9
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jan 6 09:59:55 2015 +0000
+
+    openssl: fix CVE-2014-3569
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43858 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 082256d401a5baff5821e989932a9b99d74db121
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Nov 9 13:46:29 2014 +0000
+
+    6in4: detect curl and busybox wget
+    
+    b52053b 6in4: https support for he.net tunnel api
+    introduced HTTPS support using wget.
+    The busybox version of wget, however, doesn't support the -V option,
+    thus poluting logfiles with a full invalid-parameter-output.
+    Redirect stderr to fix that.
+    As libcurl and curl support selecting the SSL library of your choice,
+    also add support for curl which is more commonly used on OpenWrt than
+    "real" wget which needs libopenssl.
+    Also make sure to respect SSL_CERT_DIR and increase timeouts.
+    
+    Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43228 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7a880be01e3fab2cf8a03c900e8e6056b4d9159a
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Nov 4 08:37:06 2014 +0000
+
+    openssl: reenable CMS (broke krb5)
+    
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43176 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 82e0cdac0b89cae46d3d7a052bad68f51285e6ad
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Oct 30 13:11:04 2014 +0000
+
+    openssl: optimize build options, disable old SSL versions
+    
+    Based on a patchset by Etienne CHAMPETIER <champetier.etienne@gmail.com>
+    Signed-off-by: Steven Barth <steven@midlink.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43123 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit c3ba1ff949ccfe384c8c465f91fd828d6e9f4540
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Oct 24 13:23:39 2014 +0000
+
+    openssl: fix target definition for x86_64 (#18182)
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43045 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a14de2d685b27c9b8ada12c004c64492f52cf05e
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 20 11:19:53 2014 +0000
+
+    openssl: host build fails when ccache is enabled
+    
+    Signed-off-by: John Crispin <blogic@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@43002 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5927fc869b92602cf832552aab26f93752638a80
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 20 09:23:55 2014 +0000
+
+    prereq-build: rename the openssl check to libssl, add back the old check - it is required after all
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42999 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 22108aaaa72096e77b8b0d4ec9afbc3ff7c3c7cc
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 20 09:18:21 2014 +0000
+
+    Revert "openssl: add host build."
+    
+    This reverts commit r42988
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42997 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d5d3585a163711ae6ce8271674ddf3f42210f641
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 20 09:17:56 2014 +0000
+
+    prereq-build: replace the openssl command check with a check for headers
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42995 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 62644cd4de3fa40d2b426e91053b02aed35bac64
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Oct 20 06:29:27 2014 +0000
+
+    openssl: add host build.
+    
+    Only support Linux at the moment.
+    
+    Signed-off-by: Yousong Zhou <yszhou4tech@gmail.com>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42988 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 08c45f71602da73af285eda12e33a71128af396b
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Oct 19 16:19:07 2014 +0000
+
+    openssl: add ABI_VERSION to fix package rebuild issues (fixes #18169)
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42963 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d7d5dc9c7e78799e18983c8e8894832dceeb2a2b
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Oct 16 08:32:54 2014 +0000
+
+    openssl: update to v1.0.1j (CVE-2014-3513, CVE-2014-3567, CVE-2014-3568)
+    
+    Also refresh patches and bump copyright year in Makefile.
+    
+    Signed-off-by: Jo-Philipp Wich <jow@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42929 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 858baf11771a085ab4758992bd9afac8f2f3edb4
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Sep 25 10:51:56 2014 +0000
+
+    curl: only set ca path for openssl
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42662 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 1f5d65fdd8867614d8a660c1e4dd7d629b169f58
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Sep 23 10:41:24 2014 +0000
+
+    ustream-ssl: select polarssl as default variant, skip openssl/cyassl dependencies if unused
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42655 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a727ea2c2c5d75a9292f1a863d05b16af71c1674
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Aug 7 20:54:41 2014 +0000
+
+    openssl: another day another bug fix update
+    
+    Signed-off-by: John Crispin <blogic@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@42055 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 60c6483919c1db2f6a4575f6b0d50f00c674ce63
+Author: hauke <hauke@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 5 21:32:36 2014 +0000
+
+    openssl: version bump to 1.0.1h
+    
+    today appeared another serious vulnerability in openssl. More info is
+    here http://ccsinjection.lepidum.co.jp. Users are advised to update to
+    openssl 1.0.1h.
+    
+    Signed-off-by: Martin Strbacka <martin.strbacka@nic.cz>
+    Signed-off-by: Hauke Mehrtens <hauke@hauke-m.de>
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@41026 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 637dbc00477b34bd54801439cac3abc5e39dc6a5
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Apr 8 05:24:36 2014 +0000
+
+    OpenSSL: update to 1.0.1g
+    
+    This fixes the Heartbleed bug (CVE-2014-0160).
+    
+    Signed-off-by: Stijn Tintel <stijn@linux-ipv6.be>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@40421 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 365be56f6b820d1f87a806066c092c222bd8246f
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Mar 14 15:05:46 2014 +0000
+
+    polarssl: update to version 1.3.4 and add openssl compat patch
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39930 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 28ab4178e3c00bcdb2f554efe5eaeb5eeca5a6bb
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Mar 12 10:00:53 2014 +0000
+
+    openssl: Fix x86_64 build on some 64bit host systems
+    
+    On some build hosts openssl fails to install since openssl installs itself into
+    lib64 while the openwrt Makefile expects the libs to end up in lib.
+    
+    install -m0644 .../openwrt/build_dir/target-x86_64_uClibc-0.9.33.2/openssl-1.0.1e/ipkg-install/usr/lib/libcrypto.so.* .../openwrt/build_dir/target-x86_64_uClibc-0.9.33.2/openssl-1.0.1e/ipkg-x86_64/libopenssl/usr/lib/
+    install: cannot stat '.../openwrt/build_dir/target-x86_64_uClibc-0.9.33.2/openssl-1.0.1e/ipkg-install/usr/lib/libcrypto.so.*': No such file or directory
+    make[2]: *** [/openwrt/bin/x86_64/packages/libopenssl_1.0.1e-2_x86_64.ipk] Error 1
+    make[2]: Leaving directory `/openwrt/package/libs/openssl'
+    make[1]: *** [package/libs/openssl/compile] Error 2
+    make[1]: Leaving directory `/openwrt'
+    
+    Set LIBDIR accordingly to fix this.
+    
+    Signed-off-by: Helmut Schaa <helmut.schaa@googlemail.com>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39885 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0f93859bd281df1954f054a5923c985892278c0e
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 9 13:23:41 2014 +0000
+
+    openssl: update to 1.0.1f
+    
+    This version includes this changes:
+    
+        Don't include gmt_unix_time in TLS server and client random values
+        Fix for TLS record tampering bug CVE-2013-4353
+        Fix for TLS version checking bug CVE-2013-6449
+        Fix for DTLS retransmission bug CVE-2013-6450
+    
+    Signed-off-by: Peter Wagner <tripolar@gmx.at>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39853 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f5a394b1192e5104aa4f43a17ca524d69ef5c2da
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 9 13:19:29 2014 +0000
+
+    openssl: detect configuration changes and clean build tree accordingly (fixes #15067)
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39852 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9455ab51714e1a904aeaa6e830c898a341209eca
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 9 13:19:25 2014 +0000
+
+    openssl: move make depend call to Build/Configure
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39851 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 22853559d65130488281f8b4273f9c8fe802dca1
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 24 21:09:03 2014 +0000
+
+    openssl: use termios instead of termio
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39748 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8b433246d37f4d19671884d27b1ca5306e8d76f1
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Feb 18 13:33:08 2014 +0000
+
+    openssl: fix up PKG_DEPENDS. there are 2 missing CONFIG_ prefixe
+    
+    Signed-off-by: John Crispin <blogic@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39607 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 29eb8d4386672616a583bc32e7680d71afa1ebe3
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Dec 14 10:19:48 2013 +0000
+
+    openssl: Support multi-threaded applications
+    
+    Allow multi-threaded applications to work properly by
+    removing the "no-threads" flag that is enabled by default.
+    
+    Signed-off-by: Sujith Manoharan <c_manoha@qca.qualcomm.com>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@39048 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 6a5d9d3669407bd66fd514c67f5b5484be11877e
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Nov 14 20:42:15 2013 +0000
+
+    openssl: add support for RIPEMD/160
+    
+    RIPEMD is needed to update erlang and i'd like to enable RIPEMD160 support in openssh.
+    
+    Size compared:
+    
+    openssl without RIPEMD/160 support:
+    647K 29. Okt 20:00 bin/ar71xx/packages/libopenssl_1.0.1e-2_ar71xx.ipk
+    
+    openssl with RIPEMD/160 support:
+    652K  8. Nov 15:11 bin/ar71xx/packages/libopenssl_1.0.1e-2_ar71xx.ipk
+    
+    So the file size just grows ~5kb, which shouldn't be a problem.
+    
+    Signed-off-by: Peter Wagner <tripolar@gmx.at>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@38809 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 35b7f766d286669e25da63329970e8ca0d97fb5c
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Oct 17 19:32:28 2013 +0000
+
+    ipkg-make-index: use more backwards-compatible openssl call for SHA256
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@38440 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b1eb813ba03fe30b8c8c4dc30b60bdb057f3dc8c
+Author: hauke <hauke@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Oct 13 22:10:57 2013 +0000
+
+    cobalt: do not build userland with support for mips1
+    
+    Without specifying -march gcc uses -march=mips1 by default, but that
+    causes problems when compiling openssl. Use -march=r5000 instead to
+    compile a userland optimized for the CPU used on this device.
+    
+    Signed-off-by: Hauke Mehrtens <hauke@hauke-m.de>
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@38386 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8bdfaa949c6eef6300964a5ffbfe771e8d1ba641
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Sep 10 12:09:13 2013 +0000
+
+    openssl: add parallel build support
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@37927 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 86d268f58a4fbd6937e117efc4f31b08a1936ab2
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Aug 14 13:02:33 2013 +0000
+
+    openssl: to disable mips16, use the new PKG_USE_MIPS16 flag instead of messing with cflags directly
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@37771 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0aa91b51af97fd83be42ea233776f03f1462f3a5
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Jul 26 10:02:55 2013 +0000
+
+    authsae 80211s authentication daemon
+    
+    This patch adds authsae open80211s authentication daemon (http://open80211s.org)
+    It's a rework of Peter Naulls patch (http://patchwork.openwrt.org/patch/1350/)
+    I've excluded the sample conf file as it's useless when used with mac80211.sh (Emanuel Taube patch)
+    It now link against libnl-tiny instead of libnl (patch merged in authsae git)
+    Authsae is 58 Ko (OPENSSL_WITH_EC option adds 35Ko to libopenssl)
+    
+    Signed-off-by: Peter Naulls <peter@chocky.org>
+    Signed-off-by: Etienne CHAMPETIER <etienne.champetier@free.fr>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@37553 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7f63e3ede7c91b5534fe14d51039606fae9ff1a2
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jul 24 12:38:06 2013 +0000
+
+    openssl: enable elliptic curve crypto by default (so that it can be used by things like ipsec as well)
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@37524 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ba98c7f7e00108c05d1d4a906b8d963e4149de66
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jul 24 12:37:55 2013 +0000
+
+    openssl: add elliptic curve crypto compilation options to openssl
+    
+    This patch adds EC compilation options to openssl
+    OPENSSL_WITH_EC is needed for authsae (OPENSSL_WITH_EC2M isn't)
+    Activating ec (but not ec2m) in openssl take 35Ko more on ar71xx (ipk size)
+    Activating both take 52Ko.
+    
+    Signed-off-by: Etienne CHAMPETIER <etienne.champetier@free.fr>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@37523 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 4e306c6756c26561c1722235d59d4ef7c1cda192
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri May 10 00:18:27 2013 +0000
+
+    openssl: disable mips16, it makes the code slower
+    
+    Signed-off-by: Felix Fietkau <nbd@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@36602 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 6d9472818ea83e5dfac4dafa2773907dfa11806f
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Apr 5 12:36:09 2013 +0000
+
+    openssl: Pass in any TARGET_ASFLAGS
+    
+    Packages not picking up the regular TARGET_AS need their openwrt
+    Makefiles tweaked. For a basic build, that's just openssl.
+    
+    This depends on patch 1/5.
+    
+    Signed-off-by: Jay Carlson <nop@nop.com>
+    Signed-off-by: Florian Fainelli <florian@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@36201 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e852ffe69568d97a4ca6fe84226fdba5bbcffa41
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Feb 19 17:22:51 2013 +0000
+
+    openssl: remove now obsolete cris/etrax patch
+    
+    The etrax target has been removed in r34768.
+    
+    Signed-off-by: Florian Fainelli <florian@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@35684 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d49f28079d36cf8f11727b0579409110b8137da3
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Feb 14 13:00:03 2013 +0000
+
+    openssl: update OpenSSL to 1.0.1e, fix Cisco DTLS.
+    
+    1.0.1d had a rushed fix for CVE-2013-0169 which broke in certain
+    circumstances. 1.0.1e has the fix for TLS.
+    
+    Also include a further patch from the 1.0.1 branch which fixes the
+    breakage this introduced for Cisco's outdated pre-standard version of
+    DTLS, as used by OpenConnect.
+    
+    Update mirror URLs to reflect current reality.
+    
+    Signed-off-by: David Woodhouse <David.Woodhouse@intel.com>
+    Signed-off-by: Florian Fainelli <florian@openwrt.org>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@35600 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ac7cda203a7e40cd34bd2ccda2055e2855e86dd9
+Author: yardley <yardley@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Feb 8 19:36:06 2013 +0000
+
+    openssl: security update to 1.0.1d to address CBC TLS issue
+    
+    addressing
+    CVE-2013-0169: 4th February 2013
+    
+    Signed-off-by: Tim Yardley <yardley@gmail.com>
+    
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@35524 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 36183f83dc4dd26ddb8c060e2f2c5bef13039632
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jan 30 20:07:04 2013 +0000
+
+    polarssl: add from /packages, update to 1.2.4, fix openssl compatibility
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@35411 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 21c1ae62d26315d74a6f9553ba8741d26b157e03
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jan 20 21:15:43 2013 +0000
+
+    uhttpd: fix selecting the right ustream implementation when openssl is to be used (#12857)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@35257 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5c3390ff78ca01fcbadf1804c3fd6264d966dfd9
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Sep 24 15:23:57 2012 +0000
+
+    openssl: use asm SHA1, SHA256, AES on MIPS.
+    
+    On a lightly loaded 24Kc, as measured by 'openssl speed sha1', shows between
+    27% and 120% speedup depending on block size.
+    SHA1 is notably used in Transmission for piece verification.
+    Patch by Catalin Patulea
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@33531 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 63c7dfbc7e07b248383541a616ee03c26c1f78fa
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Aug 29 10:08:30 2012 +0000
+
+    [openssl] revert threadsafe patch
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@33292 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 555f3a11f9dfbc1d19addaab75a8535f8b70a628
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Aug 26 06:31:04 2012 +0000
+
+    [openssl] add missin -lpthread to the util - build bots spotted this
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@33273 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0e9f6a8fa3c73985d9dac4ad2736834728c09fd4
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Aug 24 09:58:42 2012 +0000
+
+    [openssl] add safethread
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@33269 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 16cd6e1e8ad6e19a8abce14326cc29ac2ce17b7d
+Author: luka <luka@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jul 11 23:38:16 2012 +0000
+
+    openssl: enable the use of cryptodev digests
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@32673 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d1f2a4a601d949a00a796ed258402464e8c2a595
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Jun 18 23:54:08 2012 +0000
+
+    openssl does not compile with uml and arch x86_64
+    
+    Hi,
+    
+    I found that openssl did not compile on the uml target under x86_64. The
+    attached patch should
+    correct this and is working for me. Is this the right way to do it?
+    
+    thanks,
+    Thomas
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@32443 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2557831cbd5212b1180d34b36b4188d70ec03ac7
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat May 19 21:00:14 2012 +0000
+
+    [package] openssl: update to v1.0.1c (CVE-2012-2333)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@31819 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ec6780b9015e4fd54a6e07642229de9eb91a7768
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed May 2 15:40:32 2012 +0000
+
+    [package] openssl: update to 1.0.1b
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@31551 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e529cdf748e037fd511444fe1c116a33b0ac4581
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Apr 19 14:05:53 2012 +0000
+
+    [package] openssl: update to v1.0.1a (CVE-2012-2110)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@31346 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7010de0fd311ec9dee6ef53dd692c70611d20a9b
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 18 19:46:01 2012 +0000
+
+    openssl 1.0.1 update patch
+    
+    This patch updates openssl to 1.0.1 and refreshes all patches.
+    
+    Signed-off-by: Peter Wagner <tripolar@gmx.at>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@30984 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9ee670f627596043762f85b0e960c5ae0342fec8
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Mar 13 22:09:48 2012 +0000
+
+    openssl 1.0.0h update patch
+    
+    Hi
+    
+    this patch updates openssl to 1.0.0h and refreshes all patches.
+    This fixes CVE-2012-0884.
+    
+    Signed-off-by: Peter Wagner <tripolar@gmx.at>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@30939 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 603c90a31e3920b4e2eb9cdd99bfaa92b85df373
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Jan 20 17:36:30 2012 +0000
+
+    [package] openssl: update to v1.0.0g (CVE-2012-0050)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@29832 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit acf4b409c3c763245510b03b14c03ee9d97291ff
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jan 18 14:48:16 2012 +0000
+
+    [package] openssl: fix syntax error in OpenWrt Makefile
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@29774 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2ec52b29b60e09933aea6609e58f6b98b74fe742
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jan 18 03:54:09 2012 +0000
+
+    [package] openssl: don't fail with empty TARGET_LDFLAGS
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@29770 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b8e63f1c5439f9551b9dc1dfa46b39c8ee09cf9f
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Jan 6 15:18:30 2012 +0000
+
+    [package] openssl: bump to v1.0.0f (CVE-2011-4108, CVE-2011-4576, CVE-2011-4577, CVE-2011-4619, CVE-2012-0027)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@29670 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 52f10ff67fb41ea3738a4b0ab48b561c22200009
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Nov 5 03:19:07 2011 +0000
+
+    [package] uhttpd: rework CyaSSL and OpenSSL integration; move protected recv() and send() operations below the ssl layer - fixes hangs when accessing via https
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@28761 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9949bd00f10764c8d32e8202c538a57388abeda0
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Nov 3 20:02:42 2011 +0000
+
+    openssl: refresh patches
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@28736 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 229fc9a0d02b07f4e99b122936e1a6008b27b8f5
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Nov 3 20:02:36 2011 +0000
+
+    openssl: update to 1.0.0e (patch by tripolar)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@28735 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0dd0ee49446c28f754f86795d566a90a64e1bcc3
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Jul 18 14:18:31 2011 +0000
+
+    [package] uhttpd: support building against openssl instead of cyassl, minor cleanups (#7827)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@27686 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9542edff76960436923cec54aeb028b7130ca614
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Feb 8 22:52:21 2011 +0000
+
+    openssl: update to 1.0.0d - includes important bug and security fixes (patch by tripolar)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@25427 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7f1f989a38d91dbcbf08cf93693cfe1531b58587
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Feb 3 18:45:35 2011 +0000
+
+    openssl: update to 1.0.0c
+    
+    Signed-off-by: Peter Wagner <tripolar@gmx.at>
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@25348 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a30e2b06afc845e73f993829d53bcc6391643373
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Nov 19 23:24:52 2010 +0000
+
+    [package] openssl: refresh 200-ocf-20100325.patch
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@24042 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 124ad369330edcad488e0fbcab392e1b93f48510
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Nov 19 08:39:51 2010 +0000
+
+    [package] openssl: update to 0.9.8p
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@24037 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7acd328e4d3cd6954ab94d980855ff1e0a726235
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jun 6 19:02:22 2010 +0000
+
+    [package] update openssl to 0.9.8o (#7428)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@21687 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 6c8910d06f31e7b2112055fd97833aae96d6b64e
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed May 5 20:32:10 2010 +0000
+
+    [package] openssl: update to v0.9.8n, thanks Peter Wagner
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@21382 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 661b54204612cd7a758a4c64f3a4b01e7cb891b1
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue May 4 21:02:24 2010 +0000
+
+    [package] openssl: update OCF userspace part to version 20100325
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@21359 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f6c807b374b3f932f0e67fd12323b20e5511e083
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Apr 16 10:50:45 2010 +0000
+
+    package/openssl: move configuration in submenu
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20915 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a81b5c3e9fd0e6ec41f8c1272bd6b3384c5db820
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Apr 14 22:56:05 2010 +0000
+
+    openssl: fix timestamp patch - previous version patched the wrong file
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20859 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 02c2b70228ae39d9db030b517878323b9a504fae
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Apr 14 22:52:49 2010 +0000
+
+    openssl: remove the makefile timestamp check, it breaks on some host systems
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20858 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit bdaa1830146059a3d43d2e45a3620641ea28794a
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 29 23:14:47 2010 +0000
+
+    [package] openssl: add patch for CVE-2010-0740 ("Record of death") vulnerability
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20592 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cc17e1093829e86bead31a559aeac1688b1a85e7
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 28 17:09:52 2010 +0000
+
+    hostapd: clean up openssl tls dependencies and build handling (fixes #6572)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20547 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 772991beff52012cb9a1b3e8a96ec1cf8b0ee60c
+Author: juhosg <juhosg@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Mar 26 14:29:14 2010 +0000
+
+    package/openssl: refresh patches
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20473 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit de5b21a6dbb0b7aa6d6b558de66e531d0c622d65
+Author: thepeople <thepeople@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 14 01:47:55 2010 +0000
+
+    this patch fixes openssl parallel build.
+    
+    -Raphael
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@20186 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d96f30084ca3c4803dab06545181d4962b066094
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Mar 2 04:56:49 2010 +0000
+
+    [package] openssl: fix build failure on arm, aes asm version is not shipped anymore (closes: #6778)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@19945 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cca15d6bb80232fe2868e39e44b3fed5e5c1e64a
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 1 18:46:43 2010 +0000
+
+    openssl: upgrade to 0.9.8m (patch by Peter Wagner)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@19939 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit bc2ec42d25da6957d062ece9489eb6e7eebdc398
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 28 19:28:06 2010 +0000
+
+    openssl: make engines support dynamically configurable (based on a patch by puchu)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@19371 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0e35aadb536a492e746594bfb352a4536544321e
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 28 19:27:57 2010 +0000
+
+    openssl: add fixes for CVE-2009-1387 and CVE-2009-2409 (thx, puchu)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@19369 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit d114db436c42701665e5fb7ddb542ae0dc2ac9fc
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jan 28 19:27:53 2010 +0000
+
+    openssl: refresh patches
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@19368 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 86b2ef4494f06af1b87a93eb809cd6bfbec0bd49
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Dec 16 02:03:20 2009 +0000
+
+    openssl: use assembler version of aes on arm - nearly doubles aes encryption performance
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@18790 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 26862c3e56fe9164f7a7a45305d99965145b975e
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Nov 12 10:39:10 2009 +0000
+
+    update openssl to 0.9.8l -- thanks puchu
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@18398 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cd60446ca1b23bf3fae38ba428de2d512e9d9e24
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Nov 11 00:34:42 2009 +0000
+
+    hostapd: update to latest git, remove openssl dependency for hostapd-full, it works with internal crypto now
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@18360 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e2e0b921de20d12a3e331a2f067455f2a6489153
+Author: jow <jow@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Jun 29 20:48:58 2009 +0000
+
+    [package] openssl: fix bad chmod in install section (#5433)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@16624 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 20a7f3860feb4de763d6576e090498e1436a4cd5
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 17 00:25:41 2009 +0000
+
+    [package] openssl: fix annoying build errors when changing upstream versions
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@15880 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b8fd341162fe3f0189c277a198ce6bcf458745c5
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Apr 25 16:33:00 2009 +0000
+
+    [package] openssl: add a patch to support DTLS compatibility with Cisco AnyConnect & OpenConnect VPN clients (thanks to freezer)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@15410 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit be8976a84e9c28bc840eb7e972c7fc6771b629dc
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Apr 11 16:25:09 2009 +0000
+
+    [package] allow openssl to compile with ccache enabled (#4518)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@15212 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b3ce8c96a5b3dc77c60632f55f648b106ea062f5
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Apr 4 18:30:56 2009 +0000
+
+    [package] update openssl to 0.9.8k (#4846)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@15106 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0cc564e74316eff3f1d5b6c9b5a91ad902e26533
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Feb 2 22:13:17 2009 +0000
+
+    [package] openssl: add a patch to fix link segfault when using a glibc/eglibc based toolchain (closes: #4517), thanks to Luigi Mantellini
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@14375 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8b739f4586be47c1b15bfb74214635085e45e2bb
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jan 21 14:34:31 2009 +0000
+
+    [toolchain] enable UCLIBC_SUSV3_LEGACY in uClibc v0.9.30 configs to have <sys/timeb.h> & ftime (needed for openssl and maybe others), thanks to Puchu!
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@14133 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2665f08604ea948344b1758c34bfe63ee669a5fb
+Author: agb <agb@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Jan 19 09:50:41 2009 +0000
+
+    [package] openssl: update to 0.9.8j. thanks puchu.
+     - addresses CVE-2008-5077
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@14102 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 3caa31783cd2a5e2622d95f3f1b78dad1a50a0a8
+Author: juhosg <juhosg@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Nov 18 20:52:33 2008 +0000
+
+    [package] openssl: update ocf to 20080917
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@13284 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit b0af9361d315688123968c83dce9586d0fd0142b
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Nov 11 15:42:45 2008 +0000
+
+    bump openssl PKG_RELEASE
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@13184 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 423ca3c438d3c789cc5d71b6a781a23f99e624d5
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Nov 11 15:35:10 2008 +0000
+
+    enable rc2 in openssl again, because disabling it breaks pkcs12 (thx, eJunky)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@13182 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 27518b75965578f0a4348eacd683119dd02f3920
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Nov 3 21:26:27 2008 +0000
+
+    Update openssl to 0.9.8i (#4060)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@13109 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 23d5f9b0ac227ad7b0986f8626d6ebf9c5ec0241
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Sep 3 13:19:41 2008 +0000
+
+    change the an openssl sed command to be safe for -Wl,-rpath-link in ldflags
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@12511 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f814b55b4583f233de1186b8698b8e49e009c39b
+Author: blogic <blogic@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Aug 26 11:36:06 2008 +0000
+
+    adds several fixes to etrax, make openssl work on etrax
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@12393 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 56d7991b6076e383dd3a87947ad7bf789b0536a7
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jul 15 01:40:55 2008 +0000
+
+    Upgrade wpa_supplicant to 0.6.3 and add some improvements (mainly for roaming with ap_scan=1)
+    Remove arch specific config files (they seem rather pointless)
+    Remove the dependency on OpenSSL (use small built-in SSL functions)
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@11833 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit fd809eed5d8dfcc38868ac118dee228cdd846c4d
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jul 12 15:43:16 2008 +0000
+
+    add ocf support to openssl, and use it by default if engines are enabled
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@11789 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 592adfdf7413d1977bbf5199d7eb8b9f580502b0
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jul 12 15:42:00 2008 +0000
+
+    enable openssl engine support on ixp4xx
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@11788 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 868fc521a640bc311871f364d0846dcfe3e750f2
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat May 31 15:52:11 2008 +0000
+
+    updated OpenSSL to 0.9.8h
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@11309 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 7c5eb47ac7e37ce140d46498384984f5144ac28c
+Author: cyrus <cyrus@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue May 20 18:12:08 2008 +0000
+
+    Merge branch 'openssl'
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@11224 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5b001bbf09fd17dc84a3a0162bd932e73d76d429
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Nov 16 23:37:24 2007 +0000
+
+    fix hostapd build with openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@9574 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e7a15b92d368191961fd8c1e125ba2dbaead55ae
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Sep 22 04:15:33 2007 +0000
+
+    install OpenSSL pkgconfig dev files
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@8941 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 77c87e07cfa1eee90e87eb33bd6c981a2157fa5e
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Aug 1 12:32:53 2007 +0000
+
+    fix openssl with zlib-dynamic (closes: #1182), bump release number
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@8299 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 47bdee9db5dbfb0eff7845d6abb63f12baa41c38
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 28 21:09:44 2007 +0000
+
+    Add a patch for openssl to fix some breakage that happens when compiled with gcc 4.2.0
+    Note: this does not cover all instances, but it will at least compile.
+    
+    If the broken parts are reached at run time, the program will crash.
+    I wonder whose stupid idea it was to intentionally(!) make programs segfault when they hit something that *might* be unsafe to use.
+    
+    Patch taken from http://www.mail-archive.com/openssl-dev@openssl.org/msg22667.html
+    
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@7764 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 938900f0dfd8e76f12f3ffffc79639693f141a3f
+Author: pavlov <pavlov@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Apr 8 02:13:30 2007 +0000
+
+    move openssl to 0.9.8e
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@6892 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 778f5a83b25b88a46e8da75206bf935a703aaa50
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 26 05:04:13 2007 +0000
+
+    enable dso support back in openssl, needed to use shared zlib compression, and should fix the "error:2507006C:lib(37):func(112):reason(108)" errors.
+    closes: #1182
+    
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@6706 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 38c7594417fb5100fa1d868ad02b99a6adf0dbc0
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Nov 25 22:15:37 2006 +0000
+
+    sync openssl ciphers and options with whiterussian
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@5644 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 97162c302f07f7224846bf5a19df5375014aed79
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Oct 14 23:14:19 2006 +0000
+
+    fix path to bash in openssl compile
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@5105 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2ff21ef547aff184b1bff9387bc6965b546a48dc
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Sep 29 17:28:27 2006 +0000
+
+    sync openssl in wr and ng, update to 0.9.8d for security fixes
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/branches/buildroot-ng/openwrt@4873 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5dd043367ab5d021df8df4b8de65427724deb013
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Jul 19 07:25:11 2006 +0000
+
+    fix elinks dependency on openssl (closes: #614). Bump release number.
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@4166 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ed5be4a29d0e4f2cc02112ec819fdeea4d39abd1
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 15 18:32:53 2006 +0000
+
+    add openssl depend on zlib
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/branches/buildroot-ng/openwrt@3954 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 840c30e693f906b4aa54578f948ec10c32b36536
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 15 18:26:49 2006 +0000
+
+    remove global hostapd builddep on openssl
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/branches/buildroot-ng/openwrt@3953 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f99d2754b1feea539570dce7bfdaec641fc5696c
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jun 11 00:41:05 2006 +0000
+
+    add openssl
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/branches/buildroot-ng/openwrt@3931 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 882a3ad3fd49605fd0b1232754094d314d3e67ee
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Jun 1 23:28:42 2006 +0000
+
+    disable check for openssl/engine.h in configure so that the package can be
+    backported to whiterussian.
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3889 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f64bf39f038761473b3dede94daafb5633524456
+Author: florian <florian@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Apr 15 08:40:42 2006 +0000
+
+    Fixed typos in menuconfig
+    Cleanup patch, fix building when using 'pkg-config --openssl' on host system, closes #482
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3657 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0dbf45b06374f666617ffd688f80cecea968f249
+Author: wbx <wbx@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Mar 29 09:52:36 2006 +0000
+
+    add openssl dependency
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3541 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ed1b0ffeb7db9ce6f573569728f5178c13194c0e
+Author: wbx <wbx@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Mar 29 09:52:36 2006 +0000
+
+    add openssl dependency
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3541 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 38b463fe88323df59e1f5b7f00f4530f02dea50f
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Mar 28 00:05:52 2006 +0000
+
+    update osiris to v4.2.0, add mod_if module, add short desc to mod_* patches,
+    fix openssl-related build issue (could break compatibility).
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3515 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cfbf3d86853f0676c0877ea753f87c70464ea970
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Mar 28 00:05:52 2006 +0000
+
+    update osiris to v4.2.0, add mod_if module, add short desc to mod_* patches,
+    fix openssl-related build issue (could break compatibility).
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3515 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cb54fd22008be01da4ff992076201f2c491474df
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Mar 23 14:13:12 2006 +0000
+
+    first try to decrease the size of openssl 0.9.8a
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3457 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 34c6a7ae2745d1ca47f2c79fe35673e03a643747
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Mar 23 14:13:12 2006 +0000
+
+    first try to decrease the size of openssl 0.9.8a
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3457 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 4249bc8ddf7ee8f678b801d23ca13f628e1c40ec
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Feb 23 00:33:09 2006 +0000
+
+    update openssl to 0.9.8
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3265 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5ed5b75f5cbf11de7fb27f00cb921ab88e7e1e5b
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Feb 23 00:33:09 2006 +0000
+
+    update openssl to 0.9.8
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3265 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ce763c85da3fa5cefcd56bddc386507848d50f97
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jan 31 15:59:50 2006 +0000
+
+    fix ssltunnel dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3093 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit c8a88dcde0ce2f88e91ba2904fcf531e16d73f48
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue Jan 31 15:59:50 2006 +0000
+
+    fix ssltunnel dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3093 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2ecdf1880e14a6e0c15c78bd1807d68126f3d50f
+Author: wbx <wbx@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jan 29 21:20:07 2006 +0000
+
+    fix openssl dependency
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3067 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f03bac9efe160f6dc08196b70782aa317b341dd7
+Author: wbx <wbx@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Jan 29 21:20:07 2006 +0000
+
+    fix openssl dependency
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3067 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit cd503eb481d67b937cf4f5301f5e925991d93a62
+Author: olli <olli@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jan 21 20:58:17 2006 +0000
+
+    add monit build depends on openssl (fix #231)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@3032 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 4dfab11969aee76c696f5ca5fed8dc5ebcdb0bb5
+Author: olli <olli@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jan 21 20:58:17 2006 +0000
+
+    add monit build depends on openssl (fix #231)
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@3032 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 18ac290be576e612a3ac6c3268507b3b4912ecca
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Nov 18 23:09:41 2005 +0000
+
+    fix openssl build for users having something other than bash as /bin/sh
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@2525 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a6dddaa10e79549d1ea8a2aa5228ca879416eba3
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Nov 18 23:09:41 2005 +0000
+
+    fix openssl build for users having something other than bash as /bin/sh
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@2525 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 89c377c179454c98e3360d3e601d484bba9b7b89
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Oct 20 04:10:38 2005 +0000
+
+    update openssl to new upstream release (v0.9.7i),
+    enable engine support.
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@2187 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 4992754ee11aea559337e46c74df7bf15297f4c1
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Thu Oct 20 04:10:38 2005 +0000
+
+    update openssl to new upstream release (v0.9.7i),
+    enable engine support.
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@2187 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 442ac53465910abb935ed6f21c71f1de4d416132
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Oct 19 00:16:27 2005 +0000
+
+    add a patch to provide a descent PATH to cgi,
+    split in 3 packages (w/o ssl, w/ matrixssl & w/ openssl),
+    add a restart command to init-script.
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@2174 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 3dd1167ead9189b74e0c9a1fffeda09be418d687
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Wed Oct 19 00:16:27 2005 +0000
+
+    add a patch to provide a descent PATH to cgi,
+    split in 3 packages (w/o ssl, w/ matrixssl & w/ openssl),
+    add a restart command to init-script.
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@2174 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 84050b65399b92d07231cdeca72ec8bc5f462e15
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:09:57 2005 +0000
+
+    Move openldap (libopenldap) and openssl (libopenssl) at the right place
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@1017 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5bf5ad3d945f18587f4a823d200ec0c91012f40d
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:09:57 2005 +0000
+
+    Move openldap (libopenldap) and openssl (libopenssl) at the right place
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@1017 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit bac2879cc545f2758c6b4fc2f4e32f1dfe614fca
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:07:40 2005 +0000
+
+    Change openssl lib dependency from openssl to libopenssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@1016 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit db6eb93cc9b05b54a9405e47d32f9b9b21852fb2
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:07:40 2005 +0000
+
+    Change openssl lib dependency from openssl to libopenssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@1016 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 5e1b232389cbcda94a54b4593576aa8497e16d31
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:01:06 2005 +0000
+
+    Convert openssl to new packaging style, install devel stuff in STAGING_DIR/usr, change openssldir to /etc/ssl, enable MD4, add openssl-util subpackage
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@1015 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit c1bbe93e8ffc6ac3a4d8ec42f61b5eeb8943f1fc
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun May 22 10:01:06 2005 +0000
+
+    Convert openssl to new packaging style, install devel stuff in STAGING_DIR/usr, change openssldir to /etc/ssl, enable MD4, add openssl-util subpackage
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@1015 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f94f4904272d5c4e15a27d921981746777272740
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri May 20 14:23:17 2005 +0000
+
+    Fix openldap build when cyrus-sasl and openssl devel libraries are not installed on host system
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@989 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0730db039617bac75fc71a369ef662f22acd58e1
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri May 20 14:23:17 2005 +0000
+
+    Fix openldap build when cyrus-sasl and openssl devel libraries are not installed on host system
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@989 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 94c1f55e9c8fc82a4d8bdd987507430c6ac27265
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue May 10 23:47:08 2005 +0000
+
+    Add asterisk dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@822 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 094f4eb0fae82f5efff8d54d38cb98b72e85a596
+Author: nico <nico@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Tue May 10 23:47:08 2005 +0000
+
+    Add asterisk dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@822 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 9053c0d6b31dd89b1c395247766063f84efc0117
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Apr 25 18:02:01 2005 +0000
+
+    update openssl to 0.9.7g
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@715 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit a1e2538d6d01075a7389a65e28312f0fcf07335a
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Apr 25 18:02:01 2005 +0000
+
+    update openssl to 0.9.7g
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@715 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit ded027563875ad950df2e8f564e3b97cca4db4a4
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Apr 25 18:00:22 2005 +0000
+
+    disable openssl stuff in asterisk
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@714 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 0e62e53cb5d247010913707d5bc2ca0b8d02bb6f
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Apr 25 18:00:22 2005 +0000
+
+    disable openssl stuff in asterisk
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@714 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 68e11bcffb23c624f502639ea8249ef86e6251d0
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Apr 3 20:15:32 2005 +0000
+
+    upgrade to dnsmasq 2.22 and openssl 0.9.7f
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@546 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 20fbc8eaac5d4bdb4d7436bea3c07287c3d1cde6
+Author: kaloz <kaloz@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Apr 3 20:15:32 2005 +0000
+
+    upgrade to dnsmasq 2.22 and openssl 0.9.7f
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@546 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit e7781d337c5cec9f4098b08b9a4e46738671ea2a
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 7 10:26:06 2005 +0000
+
+    fix openssl build
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@329 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit c865a792838eef640cf4e03613801305cbca019d
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 7 10:26:06 2005 +0000
+
+    fix openssl build
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@329 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 3061bac13388e3efee762eb8559a95fb7e129ad7
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 7 00:13:42 2005 +0000
+
+    enable hotplug
+    fix openssl package
+    enable motorola binaries
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@324 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 35c88064da126600ed9e3de6109de3f6d91c9141
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Mon Mar 7 00:13:42 2005 +0000
+
+    enable hotplug
+    fix openssl package
+    enable motorola binaries
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@324 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 2ce27fed1815f9949537854405c9d3e4b2f88896
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 6 16:16:51 2005 +0000
+
+    add openvpn dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk/openwrt@320 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit f63914724c1923a0f1cdfb986682c6a2507d4f27
+Author: nbd <nbd@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sun Mar 6 16:16:51 2005 +0000
+
+    add openvpn dependency on openssl
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@320 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 59c30bc41c97b06995b3285f287bc38a69d36fe5
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Sat Jul 31 04:00:16 2004 +0000
+
+    openssl/openssh updates from below0
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@119 3c298f89-4303-0410-b956-a3cf2f4a3e73
+
+commit 8197afdba8d31d144a204040793e762e1995ec62
+Author: mbm <mbm@3c298f89-4303-0410-b956-a3cf2f4a3e73>
+Date:   Fri Jul 16 05:52:23 2004 +0000
+
+    openssl patches from below0
+    
+    
+    git-svn-id: svn://svn.openwrt.org/openwrt/trunk@100 3c298f89-4303-0410-b956-a3cf2f4a3e73
